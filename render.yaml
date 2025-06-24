@@ -1,0 +1,10 @@
+services:
+  - type: web
+    name: face-analyzer
+    env: python
+    buildCommand: pip install -r requirements.txt
+    startCommand: python flask_app.py
+    plan: free
+    envVars:
+      - key: PORT
+        value: 10000

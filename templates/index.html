@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <title>Face Analyzer</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        text-align: center;
+        padding: 20px;
+      }
+      video {
+        border-radius: 10px;
+        margin-bottom: 10px;
+      }
+      #suggestions li {
+        margin: 4px 0;
+      }
+      .good {
+        color: green;
+      }
+      .warn {
+        color: orange;
+      }
+      .error {
+        color: red;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>🎯 Real-Time Face Analyzer</h1>
+    <video id="video" width="480" autoplay muted playsinline></video>
+    <br />
+    <button onclick="captureAndSend()">📸 Analyze</button>
+
+    <div
+      id="results"
+      style="
+        margin-top: 20px;
+        text-align: left;
+        max-width: 500px;
+        margin-inline: auto;
+      "
+    >
+      <h3>Analysis Result:</h3>
+      <p><strong>Face Detected:</strong> <span id="faceDetected">--</span></p>
+      <p><strong>Pose Status:</strong> <span id="poseStatus">--</span></p>
+      <p>
+        <strong>Lighting Status:</strong> <span id="lightingStatus">--</span>
+      </p>
+      <ul id="suggestions">
+        <!-- Suggestions go here -->
+      </ul>
+      <details>
+        <summary>📊 Metrics</summary>
+        <pre id="metrics"></pre>
+      </details>
+    </div>
+
+    <script>
+      const video = document.getElementById("video");
+
+      // Get webcam feed
+      navigator.mediaDevices
+        .getUserMedia({ video: true })
+        .then((stream) => {
+          video.srcObject = stream;
+        })
+        .catch(() =>
+          alert("Unable to access camera. Please allow permission.")
+        );
+
+      async function captureAndSend() {
+        const canvas = document.createElement("canvas");
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        canvas.getContext("2d").drawImage(video, 0, 0);
+        const imageData = canvas.toDataURL("image/jpeg");
+
+        const res = await fetch("/analyze", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ image: imageData }),
+        });
+
+        const data = await res.json();
+        document.getElementById("faceDetected").innerText = data.faceDetected
+          ? "✅ Yes"
+          : "❌ No";
+        document.getElementById("poseStatus").innerText = data.poseStatus;
+        document.getElementById("lightingStatus").innerText =
+          data.lightingStatus;
+
+        const suggestionList = document.getElementById("suggestions");
+        suggestionList.innerHTML = "";
+        if (data.suggestions.length === 0) {
+          suggestionList.innerHTML = "<li class='good'>All good! 🎉</li>";
+        } else {
+          data.suggestions.forEach((s) => {
+            const li = document.createElement("li");
+            li.className = "warn";
+            li.innerText = s;
+            suggestionList.appendChild(li);
+          });
+        }
+
+        document.getElementById("metrics").innerText = JSON.stringify(
+          data.metrics,
+          null,
+          2
+        );
+      }
+    </script>
+  </body>
+</html>
