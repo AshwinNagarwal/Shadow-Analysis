@@ -1,7 +1,7 @@
 # Use official Python image
 FROM python:3.10-slim
 
-# Install system dependencies required for OpenCV and MediaPipe
+# Install system dependencies for OpenCV & MediaPipe
 RUN apt-get update && apt-get install -y \
     libgl1-mesa-glx \
     libglib2.0-0 \
@@ -11,18 +11,18 @@ RUN apt-get update && apt-get install -y \
 # Set working directory
 WORKDIR /app
 
-# Copy app code
+# Copy everything
 COPY . .
 
 # Install Python dependencies
 RUN pip install --upgrade pip
 RUN pip install -r requirements.txt
 
-# Set environment variable for Flask
+# Set env variable so Flask knows the port
 ENV PORT=8000
 
-# Expose the port
+# Expose that port to the web
 EXPOSE 8000
 
-# Start the app
+# Run the app
 CMD ["python", "flask_app.py"]
