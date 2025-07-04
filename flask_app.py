@@ -1,25 +1,24 @@
-# flask_app.py
 from flask import Flask, render_template, request, jsonify
-import os
 import cv2
 import numpy as np
 import mediapipe as mp
 import base64
 import re
+import os
 
-app = Flask(__name__)
+app = Flask(_name_)
 
 mp_face_mesh = mp.solutions.face_mesh
 face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, refine_landmarks=True)
 
 BRIGHT_LOW = 135
-BRIGHT_HIGH = 190
-SHADOW_THRESHOLD = 15
-FACE_AREA_THRESHOLD = 0.1
-TOLERANCE = 5
-YAW_LIMIT = 10
-PITCH_LIMIT = 10
-ROLL_LIMIT = 10
+BRIGHT_HIGH = 185
+SHADOW_THRESHOLD = 25
+FACE_AREA_THRESHOLD = 0.7
+TOLERANCE = 10
+YAW_LIMIT = 7.5
+PITCH_LIMIT = 15
+ROLL_LIMIT = 7.5
 
 model_points = np.array([
     [0.0, 0.0, 0.0],
@@ -75,88 +74,6 @@ def analyze():
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_mesh.process(rgb)
 
-    response = {
-        "faceDetected": False,
-        "poseStatus": "Not detected",
-        "lightingStatus": "Unknown",
-        "suggestions": [],
-        "metrics": {}
-    }
-
-    if results.multi_face_landmarks:
-        response["faceDetected"] = True
-        lm = results.multi_face_landmarks[0].landmark
-        points = np.array([(int(pt.x * w), int(pt.y * h)) for pt in lm])
-        hull = cv2.convexHull(points)
-        mask = np.zeros((h, w), dtype=np.uint8)
-        cv2.fillConvexPoly(mask, hull, 255)
-
-        area_ratio = np.sum(mask > 0) / (h * w)
-        response["metrics"]["faceAreaRatio"] = round(area_ratio, 3)
-
-        if area_ratio < FACE_AREA_THRESHOLD:
-            response["suggestions"].append("Move closer to the camera")
-        else:
-            yaw, pitch, roll = estimate_head_pose(lm, frame.shape)
-            response["metrics"].update({
-                "yaw": round(yaw, 2),
-                "pitch": round(pitch, 2),
-                "roll": round(roll, 2)
-            })
-
-            pose_issues = []
-            if abs(yaw) > YAW_LIMIT + TOLERANCE:
-                pose_issues.append("Turn left" if yaw < 0 else "Turn right")
-            if abs(pitch) > PITCH_LIMIT + TOLERANCE:
-                pose_issues.append("Tilt down" if pitch < 0 else "Tilt up")
-            if abs(roll) > ROLL_LIMIT + TOLERANCE:
-                pose_issues.append("Tilt right" if roll < 0 else "Tilt left")
-
-            if pose_issues:
-                response["poseStatus"] = "Misaligned"
-                response["suggestions"] += pose_issues
-            else:
-                response["poseStatus"] = "Aligned"
-
-            v = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
-            avg_brightness = np.mean(v[mask > 0])
-            response["metrics"]["avgBrightness"] = round(avg_brightness, 2)
-
-            if avg_brightness < BRIGHT_LOW:
-                response["lightingStatus"] = "Too dark"
-                response["suggestions"].append("Increase lighting")
-            elif avg_brightness > BRIGHT_HIGH:
-                response["lightingStatus"] = "Too bright"
-                response["suggestions"].append("Reduce lighting")
-            else:
-                response["lightingStatus"] = "Good"
-
-            mid_x = np.mean(points[:, 0])
-            left_mask = (mask > 0) & (np.arange(w)[None, :] < mid_x)
-            right_mask = (mask > 0) & (np.arange(w)[None, :] >= mid_x)
-            if left_mask.any() and right_mask.any():
-                left_b = np.mean(v[left_mask])
-                right_b = np.mean(v[right_mask])
-                brightness_diff = abs(left_b - right_b)
-                response["metrics"]["brightnessDiff"] = round(brightness_diff, 2)
-
-                if brightness_diff > SHADOW_THRESHOLD:
-                    side = "left" if left_b < right_b else "right"
-                    response["suggestions"].append(f"Light your {side} side better")
-                    response["lightingStatus"] = "Uneven lighting"
-
-    return jsonify(response)
-
-    data = request.get_json()
-    img_data = re.sub('^data:image/.+;base64,', '', data['image'])
-    img_bytes = base64.b64decode(img_data)
-    img_array = np.frombuffer(img_bytes, dtype=np.uint8)
-    frame = cv2.imdecode(img_array, cv2.IMREAD_COLOR)
-
-    h, w = frame.shape[:2]
-    rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
-    results = face_mesh.process(rgb)
-
     message, guidance = "No face detected", ""
 
     if results.multi_face_landmarks:
@@ -169,6 +86,8 @@ def analyze():
         area_ratio = np.sum(mask > 0) / (h * w)
         if area_ratio < FACE_AREA_THRESHOLD:
             message = "Move closer"
+        elif area_ratio > 0.8:
+            message = "Move farther"
         else:
             yaw, pitch, roll = estimate_head_pose(lm, frame.shape)
             if abs(yaw) > YAW_LIMIT + TOLERANCE:
@@ -204,7 +123,5 @@ def analyze():
 
     return jsonify({'message': message, 'guidance': guidance.strip(' | ')})
 
-
-if __name__ == '__main__':
-    port = int(os.environ.get("PORT", 5000))
-    app.run(debug=False, host='0.0.0.0', port=port)
+if _name_ == '_main_':
+    app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
