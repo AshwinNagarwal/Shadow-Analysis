@@ -23,7 +23,7 @@ face_mesh = mp_face_mesh.FaceMesh(static_image_mode=False, max_num_faces=1, refi
 BRIGHT_LOW = 135
 BRIGHT_HIGH = 185
 SHADOW_THRESHOLD = 25
-FACE_AREA_THRESHOLD = 0.7
+FACE_AREA_THRESHOLD = 0.4
 TOLERANCE = 10
 YAW_LIMIT = 7.5
 PITCH_LIMIT = 15
