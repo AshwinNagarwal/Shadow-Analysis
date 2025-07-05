@@ -83,66 +83,75 @@ def analyze():
     rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
     results = face_mesh.process(rgb)
 
-    message, guidance = "No face detected", ""
+    if not results.multi_face_landmarks:
+        return jsonify({'message': 'No face detected'})
 
-    if results.multi_face_landmarks:
-        lm = results.multi_face_landmarks[0].landmark
+    lm = results.multi_face_landmarks[0].landmark
 
-        # NEW: Ensure all landmarks are inside the frame
-        landmark_outside = any(
-            pt.x < 0 or pt.x > 1 or pt.y < 0 or pt.y > 1
-            for pt in lm
-        )
-        if landmark_outside:
-            return jsonify({
-                'message': 'Move fully into frame',
-                'guidance': 'Center your face so all features are visible'
-            })
+    # NEW: Ensure all landmarks are inside the frame
+    landmark_outside = any(
+        pt.x < 0 or pt.x > 1 or pt.y < 0 or pt.y > 1
+        for pt in lm
+    )
+    if landmark_outside:
+        return jsonify({'message': 'Move face into frame'})
 
-        points = np.array([(int(pt.x * w), int(pt.y * h)) for pt in lm])
-        hull = cv2.convexHull(points)
-        mask = np.zeros((h, w), dtype=np.uint8)
-        cv2.fillConvexPoly(mask, hull, 255)
+    points = np.array([(int(pt.x * w), int(pt.y * h)) for pt in lm])
+    hull = cv2.convexHull(points)
+    mask = np.zeros((h, w), dtype=np.uint8)
+    cv2.fillConvexPoly(mask, hull, 255)
 
-        area_ratio = np.sum(mask > 0) / (h * w)
-        if area_ratio < FACE_AREA_THRESHOLD:
-            message = "Move closer"
-        elif area_ratio > 0.8:
-            message = "Move farther"
-        else:
-            yaw, pitch, roll = estimate_head_pose(lm, frame.shape)
-            if abs(yaw) > YAW_LIMIT + TOLERANCE:
-                guidance += "Turn left | " if yaw < 0 else "Turn right | "
-            if abs(pitch) > PITCH_LIMIT + TOLERANCE:
-                guidance += "Tilt down | " if pitch < 0 else "Tilt up | "
-            if 180 - abs(roll) > ROLL_LIMIT + TOLERANCE and abs(roll) > 90:
-                guidance += "Tilt right | " if roll < 0 else "Tilt left | "
-            if abs(roll) > ROLL_LIMIT + TOLERANCE and abs(roll) < 90:
-                guidance += "Tilt right | " if roll < 0 else "Tilt left | "
-            if guidance == "":
-                guidance = "Face aligned | "
+    area_ratio = np.sum(mask > 0) / (h * w)
+    if area_ratio < FACE_AREA_THRESHOLD:
+        return jsonify({'message': 'Move closer'})
 
-            v = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
-            avg_brightness = np.mean(v[mask > 0])
-            if avg_brightness < BRIGHT_LOW:
-                message = "Increase lighting"
-            elif avg_brightness > BRIGHT_HIGH:
-                message = "Too much lighting"
+    elif area_ratio > 0.8:
+        return jsonify({'message': 'Move farther'})
+    else:
+        yaw, pitch, roll = estimate_head_pose(lm, frame.shape)
+        if abs(yaw) > YAW_LIMIT + TOLERANCE:
+            if (yaw < 0):
+                return jsonify({'message': 'Turn left'})
             else:
-                message = "Lighting OK"
+                return jsonify({'message': 'Turn right'})
+        if abs(pitch) > PITCH_LIMIT + TOLERANCE:
+            if (pitch < 0):
+                return jsonify({'message': 'Tilt down'})
+            else:
+                return jsonify({'message': 'Tilt up'})
+        if 180 - abs(roll) > ROLL_LIMIT + TOLERANCE and abs(roll) > 90:
+            if (roll < 0):
+                return jsonify({'message': 'Tilt right'})
+            else:
+                return jsonify({'message': 'Tilt left'})
+        if abs(roll) > ROLL_LIMIT + TOLERANCE and abs(roll) < 90:
+            if (roll < 0):
+                return jsonify({'message': 'Tilt right'})
+            else:
+                return jsonify({'message': 'Tilt left'})
+        #if not returned: face aligned
 
-            mid_x = np.mean(points[:, 0])
-            left_mask = (mask > 0) & (np.arange(w)[None, :] < mid_x)
-            right_mask = (mask > 0) & (np.arange(w)[None, :] >= mid_x)
-            if left_mask.any() and right_mask.any():
-                left_b = np.mean(v[left_mask])
-                right_b = np.mean(v[right_mask])
-                if abs(left_b - right_b) > SHADOW_THRESHOLD:
-                    side = "left" if left_b < right_b else "right"
-                    message += f" | Shadow on {side}"
-                    guidance += f"Light your {side} side | "
+        v = cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)[:, :, 2]
+        avg_brightness = np.mean(v[mask > 0])
+        if avg_brightness < BRIGHT_LOW:
+            return jsonify({'message': 'Increase lighting'})
+        elif avg_brightness > BRIGHT_HIGH:
+            return jsonify({'message': 'Too much light'})
+        else:
+            #Light is ok
+            pass
 
-    return jsonify({'message': message, 'guidance': guidance.strip(' | ')})
+        mid_x = np.mean(points[:, 0])
+        left_mask = (mask > 0) & (np.arange(w)[None, :] < mid_x)
+        right_mask = (mask > 0) & (np.arange(w)[None, :] >= mid_x)
+        if left_mask.any() and right_mask.any():
+            left_b = np.mean(v[left_mask])
+            right_b = np.mean(v[right_mask])
+            if abs(left_b - right_b) > SHADOW_THRESHOLD:
+                side = "left" if left_b < right_b else "right"
+                return jsonify({'message': f'Light your {side} side'})
+
+    return jsonify({'message': 'OK'})
 
 if __name__ == '__main__':
     app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000)))
